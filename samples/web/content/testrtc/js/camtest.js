@@ -41,8 +41,15 @@ function CamCaptureTest() {
   this.stream = null;
   this.testActive = false;
   this.numFrames = 0;
+  // Variables associated with near-black frame detection.
   this.numBlackFrames = 0;
   this.nonBlackPixelLumaThreshold = 20;
+  // Variables associated with nearly-frozen frames detection.
+  this.numFrozenFrames = 0;
+  this.previousFrame = [];
+  this.identicalFrameSsimThreshold = 0.985;
+  this.frameComparator = new Ssim();
+
   this.constraints = {
     video: { mandatory: { minWidth: 640, minHeight: 480} }
   };
@@ -118,6 +125,14 @@ CamCaptureTest.prototype = {
                  'has produced ' + this.numBlackFrames + '/' + this.numFrames +
                  ' near-black frames in total).', 'Camera is sending ' +
                  'non-black frames.');
+    // Check: amount of frozen frames should be 0.
+    expectEquals(0, this.numFrozenFrames, 'Your camera seems to be ' +
+                 'delivering frozen frames. This might be a symptom of the ' +
+                 'camera in a bad state; if it\'s a USB WebCam, try plugging ' +
+                 'it out and in again. (FYI: It has produced ' +
+                 this.numFrozenFrames + '/' + (this.numFrames - 1) +
+                 ' analyzed frame-pairs in total).', 'Camera is sending ' +
+                 'non-frozen frames.');
     this.stream.getVideoTracks()[0].onended = null;
     this.testActive = false;
     this.stream.getVideoTracks()[0].stop();
@@ -140,8 +155,15 @@ CamCaptureTest.prototype = {
         this.canvas.height);
     var imageData = this.context.getImageData(0, 0, this.canvas.width,
         this.canvas.height);
+
     if (this.isBlackFrame(imageData.data, imageData.data.length))
       this.numBlackFrames++;
+
+    if (this.frameComparator.calculate(this.previousFrame, imageData.data) >
+        this.identicalFrameSsimThreshold)
+      this.numFrozenFrames++;
+    this.previousFrame = imageData.data;
+
     this.numFrames++;
     if (this.testActive) {
       setTimeout(this.testFrame.bind(this), 20);
